@@ -1,0 +1,23 @@
+CSC442: Intro to AI
+Project 3: Uncertain Inference
+November, 2019
+Authors:
+ - Soubhik Ghosh (netid: sghosh13)
+
+Language: Rust
+
+Files in src/:
+        main.rs 
+
+Prerequisites:
+	Rust (https://www.rust-lang.org/tools/install)
+
+Build Instructions:
+	- 'cargo build' or 'cargo build --release'
+
+Output
+	- target/debug/bayes_nets
+	- target/release/bayes_nets
+
+Running Example:
+	- cargo run 1000 sample_networks/aima-alarm.xml B J true M true

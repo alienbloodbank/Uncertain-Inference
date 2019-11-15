@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 quick-xml = "0.17.0"
+rand = "0.7.2"

@@ -1,22 +1,34 @@
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
+use std::fmt;
 use std::fs::File;
 
-use std::io::prelude::*;
 use std::env;
+use std::io::prelude::*;
 
-use quick_xml::Reader;
 use quick_xml::events::Event;
+use quick_xml::Reader;
+
+use rand::distributions::WeightedIndex;
+use rand::prelude::*;
+
+use std::time::Instant;
 
 //use std::error::Error;
 
+const TRUE: usize = 0;
+const FALSE: usize = 1;
 
-fn get_xml_contents(file_name : String, dag: &mut HashMap<String, Node>) {
-    let mut file = File::open(&file_name[..]).unwrap();
+enum Status {
+    ExactInference,
+    ApproxInference,
+}
+
+fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
+    let mut file = File::open(file_name).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
-    
+
     let mut reader = Reader::from_str(&contents);
     reader.trim_text(true);
 
@@ -32,65 +44,50 @@ fn get_xml_contents(file_name : String, dag: &mut HashMap<String, Node>) {
 
     loop {
         match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                match e.name() {
-                    b"VARIABLE" => in_variable_tag = true,
-                    b"NAME" => in_name_tag = true,
-                    b"DEFINITION" => in_definition_tag = true,
-                    b"FOR" => in_for_tag = true,
-                    b"GIVEN" => in_given_tag = true,
-                    b"TABLE" => in_table_tag = true,
-                    _ => (),
-                }
+            Ok(Event::Start(ref e)) => match e.name() {
+                b"VARIABLE" => in_variable_tag = true,
+                b"NAME" => in_name_tag = true,
+                b"DEFINITION" => in_definition_tag = true,
+                b"FOR" => in_for_tag = true,
+                b"GIVEN" => in_given_tag = true,
+                b"TABLE" => in_table_tag = true,
+                _ => (),
             },
-            Ok(Event::End(ref e)) => {
-                match e.name() {
-                    b"VARIABLE" => in_variable_tag = false,
-                    b"NAME" => in_name_tag = false,
-                    b"DEFINITION" => {
-                        in_definition_tag = false;
-                        current_var = String::new();
-                    },
-                    b"FOR" => in_for_tag = false,
-                    b"GIVEN" => in_given_tag = false,
-                    b"TABLE" => in_table_tag = false,
-                    _ => (),
+            Ok(Event::End(ref e)) => match e.name() {
+                b"VARIABLE" => in_variable_tag = false,
+                b"NAME" => in_name_tag = false,
+                b"DEFINITION" => {
+                    in_definition_tag = false;
+                    current_var = String::new();
                 }
+                b"FOR" => in_for_tag = false,
+                b"GIVEN" => in_given_tag = false,
+                b"TABLE" => in_table_tag = false,
+                _ => (),
             },
             Ok(Event::Text(e)) => {
                 if in_variable_tag && in_name_tag {
-                    dag.insert(e.unescape_and_decode(&reader).unwrap(), Node {
-                        children: Vec::new(), 
-                        parents: Vec::new(),
-                        cpts: Vec::new(),
-                    });     
+                    let new_variable = e.unescape_and_decode(&reader).unwrap();
+
+                    net.add_variable(new_variable);
                 } else if in_definition_tag {
                     if in_for_tag {
                         current_var = e.unescape_and_decode(&reader).unwrap();
                     } else if in_given_tag {
-                        let parent = e.unescape_and_decode(&reader).unwrap();
+                        let parent_var = e.unescape_and_decode(&reader).unwrap();
 
-                        match dag.get_mut(&current_var) {
-                            Some(node) => node.parents.push(parent.clone()),
-                            None => ()
-                        };
-
-                        match dag.get_mut(&parent) {
-                            Some(node) => node.children.push(current_var.clone()),
-                            None => ()
-                        };
+                        net.add_dependency(&current_var, &parent_var);
                     } else if in_table_tag {
-                        match dag.get_mut(&current_var) {
-                            Some(node) => {
-                                let cpts = e.unescape_and_decode(&reader).unwrap();
-                                let mut nums: Vec<f64> = cpts.split_whitespace().map(|s| s.parse::<f64>().unwrap()).collect::<Vec<f64>>();
-                                node.cpts.append(&mut nums);
-                            },
-                            None => ()
-                        };
-                    }  
+                        let cps = e.unescape_and_decode(&reader).unwrap();
+                        let mut nums: Vec<f64> = cps
+                            .split_whitespace()
+                            .map(|s| s.parse::<f64>().unwrap())
+                            .collect::<Vec<f64>>();
+
+                        net.add_cps(&current_var, &mut nums);
+                    }
                 }
-            },
+            }
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
             Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
             _ => (), // There are several other `Event`s we do not consider here
@@ -101,52 +98,120 @@ fn get_xml_contents(file_name : String, dag: &mut HashMap<String, Node>) {
     }
 }
 
-struct Config {
-    file_name: String,
-    query: String,
-    evidences: HashMap<String, usize>,
+struct BayesNet {
+    dag: HashMap<String, Node>,
+    ordered_nodes: VecDeque<String>,
+}
+
+impl BayesNet {
+    fn new() -> BayesNet {
+        BayesNet {
+            dag: HashMap::new(),
+            ordered_nodes: VecDeque::new(),
+        }
+    }
+
+    fn visit(dag: &HashMap<String, Node>, variable: &String, ordered_nodes: &mut VecDeque<String>) {
+        if ordered_nodes.contains(variable) {
+            return ();
+        }
+        let node = dag.get(variable).unwrap();
+        for m in node.children.iter() {
+            BayesNet::visit(dag, m, ordered_nodes);
+        }
+        ordered_nodes.push_front(variable.to_string());
+    }
+
+    fn order_variables(&mut self) {
+        if self.ordered_nodes.is_empty() {
+            for variable in self.dag.keys() {
+                BayesNet::visit(&self.dag, variable, &mut self.ordered_nodes);
+            }
+        }
+    }
+
+    fn add_variable(&mut self, var: String) {
+        self.dag.insert(
+            var,
+            Node {
+                children: Vec::new(),
+                parents: Vec::new(),
+                cps: Vec::new(),
+            },
+        );
+    }
+
+    fn add_dependency(&mut self, var: &String, condition: &String) {
+        match self.dag.get_mut(var) {
+            Some(node) => node.parents.push(condition.to_string()),
+            None => (),
+        };
+
+        match self.dag.get_mut(condition) {
+            Some(node) => node.children.push(var.to_string()),
+            None => (),
+        };
+    }
+
+    fn is_variable_valid(&self, var: &String) -> bool {
+        self.dag.contains_key(var)
+    }
+
+    fn add_cps(&mut self, var: &String, cps: &mut Vec<f64>) {
+        match self.dag.get_mut(var) {
+            Some(node) => node.cps.append(cps),
+            None => (),
+        };
+    }
+
+    fn get_cpt_row(&self, var: &String, conditions: &HashMap<String, usize>) -> &[f64] {
+        let node = self.dag.get(var).unwrap();
+        let index: usize = node
+            .parents
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, p)| conditions.get(p).unwrap() * (1 << i + 1))
+            .sum();
+
+        &node.cps[index..(index + 2)]
+    }
 }
 
 #[derive(Debug)]
 struct Node {
-    children: Vec<String>, 
+    children: Vec<String>,
     parents: Vec<String>,
-    cpts: Vec<f64>,
+    cps: Vec<f64>,
 }
 
-fn visit(variable: &String, ordered_nodes: &mut VecDeque<String>, dag: &HashMap<String, Node>) -> () {
-    if ordered_nodes.contains(variable){
-        return ();
-    }
-    
-    match dag.get(variable) {
-        Some(node) => {
-            for m in node.children.iter() {
-                visit(m, ordered_nodes, dag);
-            }
-
-            ordered_nodes.push_front(variable.to_string());
-        },
-        None => panic!("This shouldn't happen")
-    };
+#[derive(Debug, Clone)]
+struct Config {
+    file_name: String,
+    query: String,
+    num_samples: u32,
+    evidences: HashMap<String, usize>,
 }
 
-fn get_topological_ordering(dag: &HashMap<String, Node>) -> VecDeque<String> {
-    
-    let mut ordered_nodes: VecDeque<String> = VecDeque::new();
-    for variable in dag.keys() {
-        visit(variable, &mut ordered_nodes, dag);
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "P( {} |", self.query.clone())?;
+        for (k, v) in self.evidences.iter() {
+            write!(f, " {0} = {1}", *k, *v == 0)?;
+        }
+        write!(f, " )")
     }
-    ordered_nodes
 }
 
 fn get_config(mut args: std::env::Args) -> Config {
     args.next();
-    
+
+    let num_samples = args.next().unwrap().parse::<u32>().unwrap();
+
     let file_name = args.next().expect("Didn't get a file");
 
     let mut evidences: HashMap<String, usize> = HashMap::new();
-    
+
     let query = args.next().expect("Didn't get a query");
 
     loop {
@@ -163,66 +228,133 @@ fn get_config(mut args: std::env::Args) -> Config {
         evidences.insert(evidence_variable, !evidence_value as usize);
     }
 
-    Config {file_name, query, evidences}
+    Config {
+        file_name,
+        query,
+        num_samples,
+        evidences,
+    }
 }
 
-fn enumerate_all(ordered_nodes: &mut VecDeque<String>, evidences: &HashMap<String, usize>, dag: &HashMap<String, Node>) -> f64 {
+fn enumerate_all(
+    ordered_nodes: &mut VecDeque<String>,
+    evidences: &HashMap<String, usize>,
+    net: &BayesNet,
+) -> f64 {
     match ordered_nodes.pop_front() {
         Some(y) => {
-            let node = dag.get(&y).unwrap();
-
-            let index = node.parents.iter().rev().enumerate().map(|(i, p)| evidences.get(p).unwrap() * (usize::pow(2, i as u32))).sum::<usize>();
+            let cpt_row = net.get_cpt_row(&y, evidences);
 
             match evidences.get(&y) {
-
-                Some(y_val) => {
-                    node.cpts[index * 2 + y_val] * enumerate_all(ordered_nodes, evidences, dag)
-                },
+                Some(y_val) => cpt_row[*y_val] * enumerate_all(ordered_nodes, evidences, net),
                 None => {
-                    let mut temp: f64 = 0.0;
-                    for y_val in &[0, 1] {
+                    let mut temp = 0.0;
+                    for y_val in &[TRUE, FALSE] {
                         let mut evidences_y = evidences.clone();
                         evidences_y.insert(y.clone(), *y_val);
                         let mut c_ordered_nodes = ordered_nodes.clone();
-                        temp += node.cpts[index * 2 + y_val] * enumerate_all(&mut c_ordered_nodes, &evidences_y, dag);
+                        temp += cpt_row[*y_val]
+                            * enumerate_all(&mut c_ordered_nodes, &evidences_y, net);
                     }
                     temp
-                },
+                }
             }
-        },
+        }
         None => 1.0,
     }
 }
 
-
-fn enumeration_ask(query: String, evidences: &mut HashMap<String, usize>, dag: &HashMap<String, Node>) -> Vec<f64> {
-    let ordered_nodes = get_topological_ordering(dag);
-
+fn enumeration_ask(
+    query: &String,
+    evidences: &mut HashMap<String, usize>,
+    net: &BayesNet,
+) -> Vec<f64> {
     let mut distribution: Vec<f64> = Vec::new();
-    for xi in &[0, 1] {
+    for xi in &[TRUE, FALSE] {
         let mut evidences_xi = evidences.clone();
-        evidences_xi.insert(query.clone(), *xi);
-        let mut c_ordered_nodes = ordered_nodes.clone();
-        distribution.push(enumerate_all(&mut c_ordered_nodes, &evidences_xi, dag));
+        evidences_xi.insert(query.to_string(), *xi);
+        let mut c_ordered_nodes = net.ordered_nodes.clone();
+        distribution.push(enumerate_all(&mut c_ordered_nodes, &evidences_xi, net));
     }
-    distribution
+
+    // Normalization
+    let sum: f64 = distribution.iter().sum();
+    distribution.iter().map(|x| x / sum).collect()
 }
 
+fn prior_sample(net: &BayesNet) -> HashMap<String, usize> {
+    let mut rng = rand::thread_rng();
+
+    let choices = [TRUE, FALSE];
+
+    let mut sample: HashMap<String, usize> = HashMap::new();
+    for xi in net.ordered_nodes.iter() {
+        let cpt_row = net.get_cpt_row(xi, &sample);
+
+        let dist = WeightedIndex::new(cpt_row).unwrap();
+
+        sample.insert(xi.to_string(), choices[dist.sample(&mut rng)]);
+    }
+    sample
+}
+
+fn rejection_sampling(
+    query: &String,
+    evidences: &mut HashMap<String, usize>,
+    net: &BayesNet,
+    num_samples: u32,
+) -> Vec<f64> {
+    let mut counts: Vec<usize> = vec![0, 0];
+
+    for _ in 0..num_samples {
+        let sample = prior_sample(net);
+        let is_consistent = evidences.iter().all(|(k1, v1)| {
+            let v = sample.get(k1).unwrap();
+            *v == *v1
+        });
+        if is_consistent {
+            counts[*sample.get(query).unwrap()] += 1;
+        }
+    }
+
+    // Normalization
+    let sum: usize = counts.iter().sum();
+    counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
+}
 
 fn main() {
-
     let mut config = get_config(env::args());
-     
-    // Directed Acyclic Graph
-    let mut dag: HashMap<String, Node> = HashMap::new();
 
-    get_xml_contents(config.file_name, &mut dag);
+    let mut net = BayesNet::new();
 
-    if dag.contains_key(&config.query) {
+    get_xml_contents(&config.file_name, &mut net);
+
+    net.order_variables();
+
+    if net.is_variable_valid(&config.query) {
         println!("Query variable exists");
     } else {
         println!("Query variable doesn't exist.");
     }
-    
-    println!("Ans: {:?}", enumeration_ask(config.query, &mut config.evidences, &dag));
+
+    let now = Instant::now();
+    println!(
+        "{0}\nExact Inference Ans: {1:?}",
+        config.clone(),
+        enumeration_ask(&config.query, &mut config.evidences, &net)
+    );
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+
+    let now = Instant::now();
+    println!(
+        "{0}\nRejection Sampling Ans: {1:?}",
+        config.clone(),
+        rejection_sampling(
+            &config.query,
+            &mut config.evidences,
+            &net,
+            config.num_samples
+        )
+    );
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 }
