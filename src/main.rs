@@ -411,6 +411,46 @@ fn gibbs_ask(
     counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
 }
 
+fn likelihood_weighting(query: &String, evidence: &HashMap<String, usize>, net: &BayesNet, N: u32) -> Vec<f64> {
+    let mut W: Vec<f64> = vec![0.0, 0.0];
+
+    for _ in 1..N {
+        let (x, w) = weighted_sample(net, evidence);
+        let index = x.get(query).unwrap();
+        W[*index] += w;
+    }
+    let sum: f64 = W.iter().sum();
+    W.iter().map(|x| *x / sum).collect()
+}
+
+fn weighted_sample(net: &BayesNet, evidence: &HashMap<String, usize>) -> (HashMap<String, usize>, f64) {
+    let mut rng = rand::thread_rng();
+    let die = Uniform::from(0..=1);
+
+    let mut w = 1.0;
+    let mut x = evidence.clone();
+    for key in net.get_ordered_variables() {
+        if evidence.contains_key(key) {
+            continue;
+        } else {
+            x.insert(key.to_string(), die.sample(&mut rng) as usize);
+        }
+    }
+
+    for X_i in net.get_ordered_variables() {
+        match evidence.get(X_i) {
+            Some(xi) => {
+                w *= net.get_cpt_row(X_i, &x)[*xi];
+            },
+            None => {
+                let dist = WeightedIndex::new(net.get_cpt_row(X_i, &x)).unwrap();
+                x.insert(X_i.to_string(), CHOICES[dist.sample(&mut rng)]);
+            }
+        }
+    }
+    (x, w)
+}
+
 fn main() {
     let config = get_config(env::args());
 
@@ -440,7 +480,7 @@ fn main() {
         config.clone(),
         enumeration_ask(&config.query, &config.evidences, &net)
     );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Rejection Sampling Test */
     let now = Instant::now();
@@ -449,14 +489,12 @@ fn main() {
         config.clone(),
         rejection_sampling(&config.query, &config.evidences, &net, config.num_samples)
     );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Likelihood Weighting Test */
-    // -- TODO --
-
     let now = Instant::now();
-    println!("\n{0}\nLikelihood Weighting Ans: ----", config.clone());
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    println!("\n{0}\nLikelihood Weighting Ans: {1:?}", config.clone(), likelihood_weighting(&config.query, &config.evidences, &net, config.num_samples));
+//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Gibbs Sampling Test */
     let now = Instant::now();
@@ -465,5 +503,5 @@ fn main() {
         config.clone(),
         gibbs_ask(&config.query, &config.evidences, &net, config.num_samples)
     );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 }
