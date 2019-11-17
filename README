@@ -20,4 +20,4 @@ Output
 	- target/release/bayes_nets
 
 Running Example:
-	- cargo run 1000 sample_networks/aima-alarm.xml B J true M true
+	- cargo run 10000 sample_networks/aima-alarm.xml B J true M true

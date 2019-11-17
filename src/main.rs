@@ -1,3 +1,9 @@
+/* CSC 442: Intro to AI
+ * Spring 2019
+ * Project 3: Uncertain Inference
+ * Authors: Soubhik Ghosh (netId: sghosh13)
+ */
+
 use std::collections::{HashMap, VecDeque};
 
 use std::fmt;
@@ -9,16 +15,19 @@ use std::io::prelude::*;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-use rand::distributions::WeightedIndex;
+use rand::distributions::{Uniform, WeightedIndex};
 use rand::prelude::*;
 
 use std::time::Instant;
 
-//use std::error::Error;
+enum Outcome {
+    TRUE = 0,
+    FALSE = 1,
+}
 
-const TRUE: usize = 0;
-const FALSE: usize = 1;
+const CHOICES: &[usize] = &[Outcome::TRUE as usize, Outcome::FALSE as usize];
 
+#[allow(dead_code)]
 enum Status {
     ExactInference,
     ApproxInference,
@@ -98,9 +107,17 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
     }
 }
 
+#[derive(Debug)]
 struct BayesNet {
     dag: HashMap<String, Node>,
     ordered_nodes: VecDeque<String>,
+}
+
+#[derive(Debug)]
+struct Node {
+    children: Vec<String>,
+    parents: Vec<String>,
+    cps: Vec<f64>,
 }
 
 impl BayesNet {
@@ -157,6 +174,10 @@ impl BayesNet {
         self.dag.contains_key(var)
     }
 
+    fn get_ordered_variables(&self) -> impl Iterator<Item = &String> {
+        self.ordered_nodes.iter()
+    }
+
     fn add_cps(&mut self, var: &String, cps: &mut Vec<f64>) {
         match self.dag.get_mut(var) {
             Some(node) => node.cps.append(cps),
@@ -164,25 +185,51 @@ impl BayesNet {
         };
     }
 
-    fn get_cpt_row(&self, var: &String, conditions: &HashMap<String, usize>) -> &[f64] {
+    fn get_cpt_row(&self, var: &String, observed: &HashMap<String, usize>) -> &[f64] {
         let node = self.dag.get(var).unwrap();
         let index: usize = node
             .parents
             .iter()
             .rev()
             .enumerate()
-            .map(|(i, p)| conditions.get(p).unwrap() * (1 << i + 1))
+            .map(|(i, p)| observed.get(p).unwrap() * (1 << i + 1))
             .sum();
 
         &node.cps[index..(index + 2)]
     }
-}
 
-#[derive(Debug)]
-struct Node {
-    children: Vec<String>,
-    parents: Vec<String>,
-    cps: Vec<f64>,
+    fn get_markov_blanket_cps(
+        &self,
+        var: &String,
+        observed: &mut HashMap<String, usize>,
+    ) -> Vec<f64> {
+        let mut markov_blanket_dist = vec![0.0, 0.0];
+
+        markov_blanket_dist.copy_from_slice(self.get_cpt_row(var, observed));
+
+        let node = self.dag.get(var).unwrap();
+
+        // This might not be correct
+        let _ = node
+            .children
+            .iter()
+            .map(|c| {
+                *observed.get_mut(var).unwrap() = CHOICES[0];
+                let child_cpt_row_true = self.get_cpt_row(c, observed);
+                *observed.get_mut(var).unwrap() = CHOICES[1];
+                let child_cpt_row_false = self.get_cpt_row(c, observed);
+                let c_val = observed.get(c).unwrap();
+                vec![child_cpt_row_true[*c_val], child_cpt_row_false[*c_val]]
+            })
+            .fold(markov_blanket_dist.as_mut_slice(), |acc, x| {
+                acc[0] *= x[0];
+                acc[1] *= x[1];
+                acc
+            });
+
+        // unnormalized
+        markov_blanket_dist
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -195,7 +242,11 @@ struct Config {
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "P( {} |", self.query.clone())?;
+        write!(f, "P( {} ", self.query.clone())?;
+        if self.evidences.is_empty() {
+            return write!(f, ")");
+        }
+        write!(f, "|")?;
         for (k, v) in self.evidences.iter() {
             write!(f, " {0} = {1}", *k, *v == 0)?;
         }
@@ -237,21 +288,21 @@ fn get_config(mut args: std::env::Args) -> Config {
 }
 
 fn enumerate_all(
-    ordered_nodes: &mut VecDeque<String>,
+    ordered_nodes: &mut VecDeque<&String>,
     evidences: &HashMap<String, usize>,
     net: &BayesNet,
 ) -> f64 {
     match ordered_nodes.pop_front() {
         Some(y) => {
-            let cpt_row = net.get_cpt_row(&y, evidences);
+            let cpt_row = net.get_cpt_row(y, evidences);
 
-            match evidences.get(&y) {
+            match evidences.get(y) {
                 Some(y_val) => cpt_row[*y_val] * enumerate_all(ordered_nodes, evidences, net),
                 None => {
                     let mut temp = 0.0;
-                    for y_val in &[TRUE, FALSE] {
+                    for y_val in CHOICES {
                         let mut evidences_y = evidences.clone();
-                        evidences_y.insert(y.clone(), *y_val);
+                        evidences_y.insert(y.to_string(), *y_val);
                         let mut c_ordered_nodes = ordered_nodes.clone();
                         temp += cpt_row[*y_val]
                             * enumerate_all(&mut c_ordered_nodes, &evidences_y, net);
@@ -264,16 +315,12 @@ fn enumerate_all(
     }
 }
 
-fn enumeration_ask(
-    query: &String,
-    evidences: &mut HashMap<String, usize>,
-    net: &BayesNet,
-) -> Vec<f64> {
+fn enumeration_ask(query: &String, evidences: &HashMap<String, usize>, net: &BayesNet) -> Vec<f64> {
     let mut distribution: Vec<f64> = Vec::new();
-    for xi in &[TRUE, FALSE] {
+    for xi in CHOICES {
         let mut evidences_xi = evidences.clone();
         evidences_xi.insert(query.to_string(), *xi);
-        let mut c_ordered_nodes = net.ordered_nodes.clone();
+        let mut c_ordered_nodes = net.get_ordered_variables().collect();
         distribution.push(enumerate_all(&mut c_ordered_nodes, &evidences_xi, net));
     }
 
@@ -285,22 +332,20 @@ fn enumeration_ask(
 fn prior_sample(net: &BayesNet) -> HashMap<String, usize> {
     let mut rng = rand::thread_rng();
 
-    let choices = [TRUE, FALSE];
-
     let mut sample: HashMap<String, usize> = HashMap::new();
-    for xi in net.ordered_nodes.iter() {
+    for xi in net.get_ordered_variables() {
         let cpt_row = net.get_cpt_row(xi, &sample);
 
         let dist = WeightedIndex::new(cpt_row).unwrap();
 
-        sample.insert(xi.to_string(), choices[dist.sample(&mut rng)]);
+        sample.insert(xi.to_string(), CHOICES[dist.sample(&mut rng)]);
     }
     sample
 }
 
 fn rejection_sampling(
     query: &String,
-    evidences: &mut HashMap<String, usize>,
+    evidences: &HashMap<String, usize>,
     net: &BayesNet,
     num_samples: u32,
 ) -> Vec<f64> {
@@ -322,39 +367,103 @@ fn rejection_sampling(
     counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
 }
 
+fn gibbs_ask(
+    query: &String,
+    evidences: &HashMap<String, usize>,
+    net: &BayesNet,
+    num_samples: u32,
+) -> Vec<f64> {
+    let mut counts: Vec<usize> = vec![0, 0];
+
+    let mut rng = rand::thread_rng();
+    let die = Uniform::from(0..=1);
+
+    // Getting the list of unobserved/nonevidence variables and initializing a random state
+    let mut sample: HashMap<String, usize> = HashMap::new();
+    let unobserved = net
+        .get_ordered_variables()
+        .filter(|&x| {
+            if let Some(val) = evidences.get(x) {
+                sample.insert(x.to_string(), *val);
+                false
+            } else {
+                sample.insert(x.to_string(), die.sample(&mut rng) as usize);
+                true
+            }
+        })
+        .collect::<Vec<&String>>();
+
+    for _ in 0..num_samples {
+        for &zi in unobserved.iter() {
+            // Get Markov Blanket and sample from it
+            let markov_blanket_dist = net.get_markov_blanket_cps(zi, &mut sample);
+
+            let dist = WeightedIndex::new(markov_blanket_dist.as_slice()).unwrap();
+
+            sample.insert(zi.to_string(), CHOICES[dist.sample(&mut rng)]);
+
+            counts[*sample.get(query).unwrap()] += 1;
+        }
+    }
+
+    // Normalization
+    let sum: usize = counts.iter().sum();
+    counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
+}
+
 fn main() {
-    let mut config = get_config(env::args());
+    let config = get_config(env::args());
 
     let mut net = BayesNet::new();
 
     get_xml_contents(&config.file_name, &mut net);
 
-    net.order_variables();
-
     if net.is_variable_valid(&config.query) {
-        println!("Query variable exists");
+        println!("Query variable exist");
     } else {
-        println!("Query variable doesn't exist.");
+        panic!("Query variable doesn't exist.");
     }
 
+    if config.evidences.keys().all(|e| net.is_variable_valid(e)) {
+        println!("Evidence list is valid");
+    } else {
+        panic!("Evidence list is not valid");
+    }
+
+    // Topological sorting
+    net.order_variables();
+
+    /* Exact Inference Test */
     let now = Instant::now();
     println!(
-        "{0}\nExact Inference Ans: {1:?}",
+        "\n{0}\nExact Inference Ans: {1:?}",
         config.clone(),
-        enumeration_ask(&config.query, &mut config.evidences, &net)
+        enumeration_ask(&config.query, &config.evidences, &net)
     );
     println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
+    /* Rejection Sampling Test */
     let now = Instant::now();
     println!(
-        "{0}\nRejection Sampling Ans: {1:?}",
+        "\n{0}\nRejection Sampling Ans: {1:?}",
         config.clone(),
-        rejection_sampling(
-            &config.query,
-            &mut config.evidences,
-            &net,
-            config.num_samples
-        )
+        rejection_sampling(&config.query, &config.evidences, &net, config.num_samples)
+    );
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+
+    /* Likelihood Weighting Test */
+    // -- TODO --
+
+    let now = Instant::now();
+    println!("\n{0}\nLikelihood Weighting Ans: ----", config.clone());
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+
+    /* Gibbs Sampling Test */
+    let now = Instant::now();
+    println!(
+        "\n{0}\nGibbs Sampling Ans: {1:?}",
+        config.clone(),
+        gibbs_ask(&config.query, &config.evidences, &net, config.num_samples)
     );
     println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 }
