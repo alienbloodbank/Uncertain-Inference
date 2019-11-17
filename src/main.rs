@@ -2,6 +2,7 @@
  * Spring 2019
  * Project 3: Uncertain Inference
  * Authors: Soubhik Ghosh (netId: sghosh13)
+ *          Andrew Sexton (netId: asexton2)
  */
 
 use std::collections::{HashMap, VecDeque};
@@ -411,19 +412,27 @@ fn gibbs_ask(
     counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
 }
 
-fn likelihood_weighting(query: &String, evidence: &HashMap<String, usize>, net: &BayesNet, N: u32) -> Vec<f64> {
-    let mut W: Vec<f64> = vec![0.0, 0.0];
+fn likelihood_weighting(
+    query: &String,
+    evidence: &HashMap<String, usize>,
+    net: &BayesNet,
+    n: u32,
+) -> Vec<f64> {
+    let mut big_w: Vec<f64> = vec![0.0, 0.0];
 
-    for _ in 1..N {
+    for _ in 1..n {
         let (x, w) = weighted_sample(net, evidence);
         let index = x.get(query).unwrap();
-        W[*index] += w;
+        big_w[*index] += w;
     }
-    let sum: f64 = W.iter().sum();
-    W.iter().map(|x| *x / sum).collect()
+    let sum: f64 = big_w.iter().sum();
+    big_w.iter().map(|x| *x / sum).collect()
 }
 
-fn weighted_sample(net: &BayesNet, evidence: &HashMap<String, usize>) -> (HashMap<String, usize>, f64) {
+fn weighted_sample(
+    net: &BayesNet,
+    evidence: &HashMap<String, usize>,
+) -> (HashMap<String, usize>, f64) {
     let mut rng = rand::thread_rng();
     let die = Uniform::from(0..=1);
 
@@ -437,14 +446,14 @@ fn weighted_sample(net: &BayesNet, evidence: &HashMap<String, usize>) -> (HashMa
         }
     }
 
-    for X_i in net.get_ordered_variables() {
-        match evidence.get(X_i) {
+    for x_i in net.get_ordered_variables() {
+        match evidence.get(x_i) {
             Some(xi) => {
-                w *= net.get_cpt_row(X_i, &x)[*xi];
-            },
+                w *= net.get_cpt_row(x_i, &x)[*xi];
+            }
             None => {
-                let dist = WeightedIndex::new(net.get_cpt_row(X_i, &x)).unwrap();
-                x.insert(X_i.to_string(), CHOICES[dist.sample(&mut rng)]);
+                let dist = WeightedIndex::new(net.get_cpt_row(x_i, &x)).unwrap();
+                x.insert(x_i.to_string(), CHOICES[dist.sample(&mut rng)]);
             }
         }
     }
@@ -480,7 +489,7 @@ fn main() {
         config.clone(),
         enumeration_ask(&config.query, &config.evidences, &net)
     );
-//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Rejection Sampling Test */
     let now = Instant::now();
@@ -489,12 +498,16 @@ fn main() {
         config.clone(),
         rejection_sampling(&config.query, &config.evidences, &net, config.num_samples)
     );
-//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Likelihood Weighting Test */
     let now = Instant::now();
-    println!("\n{0}\nLikelihood Weighting Ans: {1:?}", config.clone(), likelihood_weighting(&config.query, &config.evidences, &net, config.num_samples));
-//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    println!(
+        "\n{0}\nLikelihood Weighting Ans: {1:?}",
+        config.clone(),
+        likelihood_weighting(&config.query, &config.evidences, &net, config.num_samples)
+    );
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 
     /* Gibbs Sampling Test */
     let now = Instant::now();
@@ -503,5 +516,5 @@ fn main() {
         config.clone(),
         gibbs_ask(&config.query, &config.evidences, &net, config.num_samples)
     );
-//    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
 }
