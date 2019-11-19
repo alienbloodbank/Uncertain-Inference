@@ -19,6 +19,8 @@ use quick_xml::Reader;
 use rand::distributions::{Uniform, WeightedIndex};
 use rand::prelude::*;
 
+use ndarray::{Array, Array2};
+
 use std::time::Instant;
 
 enum Outcome {
@@ -28,13 +30,13 @@ enum Outcome {
 
 const CHOICES: &[usize] = &[Outcome::TRUE as usize, Outcome::FALSE as usize];
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 enum Status {
     ExactInference,
-    ApproxInference,
+    ApproxInference(u32),
 }
 
-fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
+fn get_xml_contents(file_name: &str, net: &mut BayesNet) {
     let mut file = File::open(file_name).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
@@ -52,6 +54,8 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
     let mut in_table_tag = false;
     let mut current_var = String::new();
 
+    let mut cps: Vec<f64> = Vec::new();
+
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
@@ -60,7 +64,10 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
                 b"DEFINITION" => in_definition_tag = true,
                 b"FOR" => in_for_tag = true,
                 b"GIVEN" => in_given_tag = true,
-                b"TABLE" => in_table_tag = true,
+                b"TABLE" => {
+                    in_table_tag = true;
+                    cps.clear();
+                }
                 _ => (),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -72,7 +79,10 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
                 }
                 b"FOR" => in_for_tag = false,
                 b"GIVEN" => in_given_tag = false,
-                b"TABLE" => in_table_tag = false,
+                b"TABLE" => {
+                    in_table_tag = false;
+                    net.add_cps(&current_var, cps.clone());
+                }
                 _ => (),
             },
             Ok(Event::Text(e)) => {
@@ -88,13 +98,14 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
 
                         net.add_dependency(&current_var, &parent_var);
                     } else if in_table_tag {
-                        let cps = e.unescape_and_decode(&reader).unwrap();
-                        let mut nums: Vec<f64> = cps
+                        let mut nums: Vec<f64> = e
+                            .unescape_and_decode(&reader)
+                            .unwrap()
                             .split_whitespace()
                             .map(|s| s.parse::<f64>().unwrap())
                             .collect::<Vec<f64>>();
 
-                        net.add_cps(&current_var, &mut nums);
+                        cps.append(&mut nums);
                     }
                 }
             }
@@ -109,7 +120,7 @@ fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
 }
 
 #[derive(Debug)]
-struct BayesNet {
+pub struct BayesNet {
     dag: HashMap<String, Node>,
     ordered_nodes: VecDeque<String>,
 }
@@ -118,7 +129,7 @@ struct BayesNet {
 struct Node {
     children: Vec<String>,
     parents: Vec<String>,
-    cps: Vec<f64>,
+    cpt: Array2<f64>,
 }
 
 impl BayesNet {
@@ -141,10 +152,9 @@ impl BayesNet {
     }
 
     fn order_variables(&mut self) {
-        if self.ordered_nodes.is_empty() {
-            for variable in self.dag.keys() {
-                BayesNet::visit(&self.dag, variable, &mut self.ordered_nodes);
-            }
+        self.ordered_nodes.clear();
+        for variable in self.dag.keys() {
+            BayesNet::visit(&self.dag, variable, &mut self.ordered_nodes);
         }
     }
 
@@ -154,7 +164,7 @@ impl BayesNet {
             Node {
                 children: Vec::new(),
                 parents: Vec::new(),
-                cps: Vec::new(),
+                cpt: Array::default((0, 0)),
             },
         );
     }
@@ -179,9 +189,12 @@ impl BayesNet {
         self.ordered_nodes.iter()
     }
 
-    fn add_cps(&mut self, var: &String, cps: &mut Vec<f64>) {
+    fn add_cps(&mut self, var: &String, cps: Vec<f64>) {
         match self.dag.get_mut(var) {
-            Some(node) => node.cps.append(cps),
+            Some(node) => {
+                let nrows = cps.len() / 2;
+                node.cpt = Array2::from_shape_vec((nrows, 2), cps).unwrap();
+            }
             None => (),
         };
     }
@@ -193,10 +206,10 @@ impl BayesNet {
             .iter()
             .rev()
             .enumerate()
-            .map(|(i, p)| observed.get(p).unwrap() * (1 << i + 1))
+            .map(|(i, p)| observed.get(p).unwrap() * (1 << i))
             .sum();
 
-        &node.cps[index..(index + 2)]
+        node.cpt.row(index).to_slice().unwrap()
     }
 
     fn get_markov_blanket_cps(
@@ -234,10 +247,10 @@ impl BayesNet {
 }
 
 #[derive(Debug, Clone)]
-struct Config {
+pub struct Config {
     file_name: String,
     query: String,
-    num_samples: u32,
+    inference_type: Status,
     evidences: HashMap<String, usize>,
 }
 
@@ -255,36 +268,47 @@ impl fmt::Display for Config {
     }
 }
 
-fn get_config(mut args: std::env::Args) -> Config {
-    args.next();
+impl Config {
+    fn new(mut args: std::env::Args) -> Self {
+        args.next();
 
-    let num_samples = args.next().unwrap().parse::<u32>().unwrap();
+        let inference_type_decider = args.next().unwrap();
 
-    let file_name = args.next().expect("Didn't get a file");
-
-    let mut evidences: HashMap<String, usize> = HashMap::new();
-
-    let query = args.next().expect("Didn't get a query");
-
-    loop {
-        let evidence_variable = match args.next() {
-            Some(arg) => arg,
-            None => break,
+        let (file_name, inference_type) = match inference_type_decider.parse::<u32>() {
+            Ok(num_samples) => {
+                let file_name = args.next().expect("Didn't get a file");
+                (file_name, Status::ApproxInference(num_samples))
+            }
+            Err(_) => {
+                let file_name = inference_type_decider;
+                (file_name, Status::ExactInference)
+            }
         };
 
-        let evidence_value = match args.next() {
-            Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
-            None => panic!("Didn't get a variable value"),
-        };
+        let mut evidences: HashMap<String, usize> = HashMap::new();
 
-        evidences.insert(evidence_variable, !evidence_value as usize);
-    }
+        let query = args.next().expect("Didn't get a query");
 
-    Config {
-        file_name,
-        query,
-        num_samples,
-        evidences,
+        loop {
+            let evidence_variable = match args.next() {
+                Some(arg) => arg,
+                None => break,
+            };
+
+            let evidence_value = match args.next() {
+                Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
+                None => panic!("Didn't get a variable value"),
+            };
+
+            evidences.insert(evidence_variable, !evidence_value as usize);
+        }
+
+        Config {
+            file_name,
+            query,
+            inference_type,
+            evidences,
+        }
     }
 }
 
@@ -330,10 +354,9 @@ fn enumeration_ask(query: &String, evidences: &HashMap<String, usize>, net: &Bay
     distribution.iter().map(|x| x / sum).collect()
 }
 
-fn prior_sample(net: &BayesNet) -> HashMap<String, usize> {
+fn prior_sample(net: &BayesNet, sample: &mut HashMap<String, usize>) {
     let mut rng = rand::thread_rng();
 
-    let mut sample: HashMap<String, usize> = HashMap::new();
     for xi in net.get_ordered_variables() {
         let cpt_row = net.get_cpt_row(xi, &sample);
 
@@ -341,7 +364,6 @@ fn prior_sample(net: &BayesNet) -> HashMap<String, usize> {
 
         sample.insert(xi.to_string(), CHOICES[dist.sample(&mut rng)]);
     }
-    sample
 }
 
 fn rejection_sampling(
@@ -350,22 +372,70 @@ fn rejection_sampling(
     net: &BayesNet,
     num_samples: u32,
 ) -> Vec<f64> {
-    let mut counts: Vec<usize> = vec![0, 0];
+    let mut counts: Vec<f64> = vec![0.0, 0.0];
 
+    let mut sample: HashMap<String, usize> = HashMap::new();
     for _ in 0..num_samples {
-        let sample = prior_sample(net);
+        prior_sample(net, &mut sample);
         let is_consistent = evidences.iter().all(|(k1, v1)| {
             let v = sample.get(k1).unwrap();
             *v == *v1
         });
         if is_consistent {
-            counts[*sample.get(query).unwrap()] += 1;
+            counts[*sample.get(query).unwrap()] += 1.0;
         }
     }
 
     // Normalization
-    let sum: usize = counts.iter().sum();
-    counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
+    let sum: f64 = counts.iter().sum();
+    counts.iter().map(|x| *x / sum).collect()
+}
+
+fn weighted_sample(
+    net: &BayesNet,
+    evidence: &HashMap<String, usize>,
+) -> (HashMap<String, usize>, f64) {
+    let mut rng = rand::thread_rng();
+    let die = Uniform::from(0..=1);
+
+    let mut w = 1.0;
+    let mut x = evidence.clone();
+    for key in net.get_ordered_variables() {
+        if !evidence.contains_key(key) {
+            x.insert(key.to_string(), die.sample(&mut rng) as usize);
+        }
+    }
+
+    for x_i in net.get_ordered_variables() {
+        match evidence.get(x_i) {
+            Some(xi) => {
+                w *= net.get_cpt_row(x_i, &x)[*xi];
+            }
+            None => {
+                let dist = WeightedIndex::new(net.get_cpt_row(x_i, &x)).unwrap();
+                x.insert(x_i.to_string(), CHOICES[dist.sample(&mut rng)]);
+            }
+        }
+    }
+    (x, w)
+}
+
+fn likelihood_weighting(
+    query: &String,
+    evidence: &HashMap<String, usize>,
+    net: &BayesNet,
+    num_samples: u32,
+) -> Vec<f64> {
+    let mut big_w: Vec<f64> = vec![0.0, 0.0];
+
+    for _ in 0..num_samples {
+        let (x, w) = weighted_sample(net, evidence);
+        let index = x.get(query).unwrap();
+        big_w[*index] += w;
+    }
+
+    let sum: f64 = big_w.iter().sum();
+    big_w.iter().map(|x| *x / sum).collect()
 }
 
 fn gibbs_ask(
@@ -374,7 +444,7 @@ fn gibbs_ask(
     net: &BayesNet,
     num_samples: u32,
 ) -> Vec<f64> {
-    let mut counts: Vec<usize> = vec![0, 0];
+    let mut counts: Vec<f64> = vec![0.0, 0.0];
 
     let mut rng = rand::thread_rng();
     let die = Uniform::from(0..=1);
@@ -403,65 +473,51 @@ fn gibbs_ask(
 
             sample.insert(zi.to_string(), CHOICES[dist.sample(&mut rng)]);
 
-            counts[*sample.get(query).unwrap()] += 1;
+            counts[*sample.get(query).unwrap()] += 1.0;
         }
     }
 
     // Normalization
-    let sum: usize = counts.iter().sum();
-    counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
+    let sum: f64 = counts.iter().sum();
+    counts.iter().map(|x| *x / sum).collect()
 }
 
-fn likelihood_weighting(
-    query: &String,
-    evidence: &HashMap<String, usize>,
-    net: &BayesNet,
-    n: u32,
-) -> Vec<f64> {
-    let mut big_w: Vec<f64> = vec![0.0, 0.0];
+mod test_inference {
+    use super::*;
 
-    for _ in 1..n {
-        let (x, w) = weighted_sample(net, evidence);
-        let index = x.get(query).unwrap();
-        big_w[*index] += w;
+    pub fn exact_inference<F>(config: &Config, net: &BayesNet, test_name: &str, f: F)
+    where
+        F: Fn(&String, &HashMap<String, usize>, &BayesNet) -> Vec<f64>,
+    {
+        let now = Instant::now();
+        println!(
+            "\n{0}\n{1} Ans: {2:?}",
+            test_name,
+            config,
+            f(&config.query, &config.evidences, net)
+        );
+        println!("{} seconds elapsed", now.elapsed().as_secs_f64());
     }
-    let sum: f64 = big_w.iter().sum();
-    big_w.iter().map(|x| *x / sum).collect()
-}
 
-fn weighted_sample(
-    net: &BayesNet,
-    evidence: &HashMap<String, usize>,
-) -> (HashMap<String, usize>, f64) {
-    let mut rng = rand::thread_rng();
-    let die = Uniform::from(0..=1);
-
-    let mut w = 1.0;
-    let mut x = evidence.clone();
-    for key in net.get_ordered_variables() {
-        if evidence.contains_key(key) {
-            continue;
-        } else {
-            x.insert(key.to_string(), die.sample(&mut rng) as usize);
+    pub fn approx_inference<F>(config: &Config, net: &BayesNet, test_name: &str, f: F)
+    where
+        F: Fn(&String, &HashMap<String, usize>, &BayesNet, u32) -> Vec<f64>,
+    {
+        let now = Instant::now();
+        if let Status::ApproxInference(num_samples) = config.inference_type {
+            println!(
+                "\n{0}\n{1} Ans: {2:?}",
+                test_name,
+                config,
+                f(&config.query, &config.evidences, net, num_samples)
+            );
         }
+        println!("{} seconds elapsed", now.elapsed().as_secs_f64());
     }
-
-    for x_i in net.get_ordered_variables() {
-        match evidence.get(x_i) {
-            Some(xi) => {
-                w *= net.get_cpt_row(x_i, &x)[*xi];
-            }
-            None => {
-                let dist = WeightedIndex::new(net.get_cpt_row(x_i, &x)).unwrap();
-                x.insert(x_i.to_string(), CHOICES[dist.sample(&mut rng)]);
-            }
-        }
-    }
-    (x, w)
 }
 
 fn main() {
-    let config = get_config(env::args());
+    let config = Config::new(env::args());
 
     let mut net = BayesNet::new();
 
@@ -482,39 +538,35 @@ fn main() {
     // Topological sorting
     net.order_variables();
 
-    /* Exact Inference Test */
-    let now = Instant::now();
-    println!(
-        "\n{0}\nExact Inference Ans: {1:?}",
-        config.clone(),
-        enumeration_ask(&config.query, &config.evidences, &net)
-    );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    match config.inference_type {
+        Status::ExactInference => {
+            /* Exact Inference Test */
+            test_inference::exact_inference(
+                &config,
+                &net,
+                "Inference by Enumeration",
+                enumeration_ask,
+            );
+        }
+        Status::ApproxInference(_) => {
+            /* Rejection Sampling Test */
+            test_inference::approx_inference(
+                &config,
+                &net,
+                "Rejection Sampling",
+                rejection_sampling,
+            );
 
-    /* Rejection Sampling Test */
-    let now = Instant::now();
-    println!(
-        "\n{0}\nRejection Sampling Ans: {1:?}",
-        config.clone(),
-        rejection_sampling(&config.query, &config.evidences, &net, config.num_samples)
-    );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+            /* Likelihood Weighting Test */
+            test_inference::approx_inference(
+                &config,
+                &net,
+                "Likelihood Weighting",
+                likelihood_weighting,
+            );
 
-    /* Likelihood Weighting Test */
-    let now = Instant::now();
-    println!(
-        "\n{0}\nLikelihood Weighting Ans: {1:?}",
-        config.clone(),
-        likelihood_weighting(&config.query, &config.evidences, &net, config.num_samples)
-    );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
-
-    /* Gibbs Sampling Test */
-    let now = Instant::now();
-    println!(
-        "\n{0}\nGibbs Sampling Ans: {1:?}",
-        config.clone(),
-        gibbs_ask(&config.query, &config.evidences, &net, config.num_samples)
-    );
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+            /* Gibbs Sampling Test */
+            test_inference::approx_inference(&config, &net, "Gibbs Sampling", gibbs_ask);
+        }
+    };
 }
