@@ -10,7 +10,7 @@ pub fn gibbs_ask(
     net: &BayesNet,
     num_samples: u32,
 ) -> Vec<f64> {
-    let mut counts: Vec<usize> = vec![0, 0];
+    let mut counts: Vec<f64> = vec![0.0, 0.0];
     let mut rng = rand::thread_rng();
     let die = Uniform::from(0..=1);
 
@@ -35,10 +35,10 @@ pub fn gibbs_ask(
             let markov_blanket_dist = net.get_markov_blanket_cps(zi, &mut sample);
             let dist = WeightedIndex::new(markov_blanket_dist.as_slice()).unwrap();
             sample.insert(zi.to_string(), CHOICES[dist.sample(&mut rng)]);
-            counts[*sample.get(query).unwrap()] += 1;
+            counts[*sample.get(query).unwrap()] += 1.0;
         }
     }
     // Normalization
-    let sum: usize = counts.iter().sum();
-    counts.iter().map(|x| (*x as f64) / (sum as f64)).collect()
+    let sum: f64 = counts.iter().sum();
+    counts.iter().map(|x| *x / sum).collect()
 }

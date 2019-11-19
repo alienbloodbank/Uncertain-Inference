@@ -1,7 +1,10 @@
 use crate::CHOICES;
+use crate::Status;
 use std::collections::{HashMap, VecDeque};
+use ndarray::{Array, Array2};
 use std::fmt;
 
+#[derive(Debug)]
 pub struct BayesNet {
     pub dag: HashMap<String, Node>,
     pub ordered_nodes: VecDeque<String>,
@@ -9,9 +12,9 @@ pub struct BayesNet {
 
 #[derive(Debug)]
 pub struct Node {
-    pub children: Vec<String>,
-    pub parents: Vec<String>,
-    pub cps: Vec<f64>,
+    children: Vec<String>,
+    parents: Vec<String>,
+    cpt: Array2<f64>,
 }
 
 impl BayesNet {
@@ -22,11 +25,7 @@ impl BayesNet {
         }
     }
 
-    pub fn visit(
-        dag: &HashMap<String, Node>,
-        variable: &String,
-        ordered_nodes: &mut VecDeque<String>,
-    ) {
+    pub fn visit(dag: &HashMap<String, Node>, variable: &String, ordered_nodes: &mut VecDeque<String>) {
         if ordered_nodes.contains(variable) {
             return ();
         }
@@ -38,10 +37,9 @@ impl BayesNet {
     }
 
     pub fn order_variables(&mut self) {
-        if self.ordered_nodes.is_empty() {
-            for variable in self.dag.keys() {
-                BayesNet::visit(&self.dag, variable, &mut self.ordered_nodes);
-            }
+        self.ordered_nodes.clear();
+        for variable in self.dag.keys() {
+            BayesNet::visit(&self.dag, variable, &mut self.ordered_nodes);
         }
     }
 
@@ -51,7 +49,7 @@ impl BayesNet {
             Node {
                 children: Vec::new(),
                 parents: Vec::new(),
-                cps: Vec::new(),
+                cpt: Array::default((0, 0)),
             },
         );
     }
@@ -76,9 +74,12 @@ impl BayesNet {
         self.ordered_nodes.iter()
     }
 
-    pub fn add_cps(&mut self, var: &String, cps: &mut Vec<f64>) {
+    pub fn add_cps(&mut self, var: &String, cps: Vec<f64>) {
         match self.dag.get_mut(var) {
-            Some(node) => node.cps.append(cps),
+            Some(node) => {
+                let nrows = cps.len() / 2;
+                node.cpt = Array2::from_shape_vec((nrows, 2), cps).unwrap();
+            }
             None => (),
         };
     }
@@ -90,10 +91,10 @@ impl BayesNet {
             .iter()
             .rev()
             .enumerate()
-            .map(|(i, p)| observed.get(p).unwrap() * (1 << i + 1))
+            .map(|(i, p)| observed.get(p).unwrap() * (1 << i))
             .sum();
 
-        &node.cps[index..(index + 2)]
+        node.cpt.row(index).to_slice().unwrap()
     }
 
     pub fn get_markov_blanket_cps(
@@ -102,8 +103,11 @@ impl BayesNet {
         observed: &mut HashMap<String, usize>,
     ) -> Vec<f64> {
         let mut markov_blanket_dist = vec![0.0, 0.0];
+
         markov_blanket_dist.copy_from_slice(self.get_cpt_row(var, observed));
+
         let node = self.dag.get(var).unwrap();
+
         // This might not be correct
         let _ = node
             .children
@@ -131,7 +135,7 @@ impl BayesNet {
 pub struct Config {
     pub file_name: String,
     pub query: String,
-    pub num_samples: u32,
+    pub inference_type: Status,
     pub evidences: HashMap<String, usize>,
 }
 
@@ -149,29 +153,47 @@ impl fmt::Display for Config {
     }
 }
 
-pub fn get_config(mut args: std::env::Args) -> Config {
-    args.next();
 
-    let num_samples = args.next().unwrap().parse::<u32>().unwrap();
-    let file_name = args.next().expect("Didn't get a file");
-    let mut evidences: HashMap<String, usize> = HashMap::new();
-    let query = args.next().expect("Didn't get a query");
+impl Config {
+    pub fn new(mut args: std::env::Args) -> Self {
+        args.next();
 
-    loop {
-        let evidence_variable = match args.next() {
-            Some(arg) => arg,
-            None => break,
+        let inference_type_decider = args.next().unwrap();
+
+        let (file_name, inference_type) = match inference_type_decider.parse::<u32>() {
+            Ok(num_samples) => {
+                let file_name = args.next().expect("Didn't get a file");
+                (file_name, Status::ApproxInference(num_samples))
+            }
+            Err(_) => {
+                let file_name = inference_type_decider;
+                (file_name, Status::ExactInference)
+            }
         };
-        let evidence_value = match args.next() {
-            Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
-            None => panic!("Didn't get a variable value"),
-        };
-        evidences.insert(evidence_variable, !evidence_value as usize);
-    }
-    Config {
-        file_name,
-        query,
-        num_samples,
-        evidences,
+
+        let mut evidences: HashMap<String, usize> = HashMap::new();
+
+        let query = args.next().expect("Didn't get a query");
+
+        loop {
+            let evidence_variable = match args.next() {
+                Some(arg) => arg,
+                None => break,
+            };
+
+            let evidence_value = match args.next() {
+                Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
+                None => panic!("Didn't get a variable value"),
+            };
+
+            evidences.insert(evidence_variable, !evidence_value as usize);
+        }
+
+        Config {
+            file_name,
+            query,
+            inference_type,
+            evidences,
+        }
     }
 }

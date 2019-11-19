@@ -4,7 +4,7 @@ use quick_xml::Reader;
 use std::fs::File;
 use std::io::prelude::*;
 
-pub fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
+pub fn get_xml_contents(file_name: &str, net: &mut BayesNet) {
     let mut file = File::open(file_name).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
@@ -22,6 +22,8 @@ pub fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
     let mut in_table_tag = false;
     let mut current_var = String::new();
 
+    let mut cps: Vec<f64> = Vec::new();
+
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
@@ -30,7 +32,10 @@ pub fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
                 b"DEFINITION" => in_definition_tag = true,
                 b"FOR" => in_for_tag = true,
                 b"GIVEN" => in_given_tag = true,
-                b"TABLE" => in_table_tag = true,
+                b"TABLE" => {
+                    in_table_tag = true;
+                    cps.clear();
+                }
                 _ => (),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -42,26 +47,33 @@ pub fn get_xml_contents(file_name: &String, net: &mut BayesNet) {
                 }
                 b"FOR" => in_for_tag = false,
                 b"GIVEN" => in_given_tag = false,
-                b"TABLE" => in_table_tag = false,
+                b"TABLE" => {
+                    in_table_tag = false;
+                    net.add_cps(&current_var, cps.clone());
+                }
                 _ => (),
             },
             Ok(Event::Text(e)) => {
                 if in_variable_tag && in_name_tag {
                     let new_variable = e.unescape_and_decode(&reader).unwrap();
+
                     net.add_variable(new_variable);
                 } else if in_definition_tag {
                     if in_for_tag {
                         current_var = e.unescape_and_decode(&reader).unwrap();
                     } else if in_given_tag {
                         let parent_var = e.unescape_and_decode(&reader).unwrap();
+
                         net.add_dependency(&current_var, &parent_var);
                     } else if in_table_tag {
-                        let cps = e.unescape_and_decode(&reader).unwrap();
-                        let mut nums: Vec<f64> = cps
+                        let mut nums: Vec<f64> = e
+                            .unescape_and_decode(&reader)
+                            .unwrap()
                             .split_whitespace()
                             .map(|s| s.parse::<f64>().unwrap())
                             .collect::<Vec<f64>>();
-                        net.add_cps(&current_var, &mut nums);
+
+                        cps.append(&mut nums);
                     }
                 }
             }
