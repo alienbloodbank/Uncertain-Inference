@@ -42,6 +42,7 @@ pub fn enumeration_ask(
         let mut c_ordered_nodes = net.get_ordered_variables().collect();
         distribution.push(enumerate_all(&mut c_ordered_nodes, &evidences_xi, net));
     }
+
     // Normalization
     let sum: f64 = distribution.iter().sum();
     distribution.iter().map(|x| x / sum).collect()

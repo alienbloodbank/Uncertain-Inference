@@ -9,14 +9,15 @@ pub fn likelihood_weighting(
     query: &String,
     evidence: &HashMap<String, usize>,
     net: &BayesNet,
-    n: u32,
+    num_samples: u32,
 ) -> Vec<f64> {
     let mut big_w: Vec<f64> = vec![0.0, 0.0];
-    for _ in 1..n {
+    for _ in 0..num_samples {
         let (x, w) = weighted_sample(net, evidence);
         let index = x.get(query).unwrap();
         big_w[*index] += w;
     }
+
     let sum: f64 = big_w.iter().sum();
     big_w.iter().map(|x| *x / sum).collect()
 }
@@ -31,9 +32,7 @@ fn weighted_sample(
     let mut x = evidence.clone();
 
     for key in net.get_ordered_variables() {
-        if evidence.contains_key(key) {
-            continue;
-        } else {
+        if !evidence.contains_key(key) {
             x.insert(key.to_string(), die.sample(&mut rng) as usize);
         }
     }

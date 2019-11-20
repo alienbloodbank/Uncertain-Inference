@@ -1,17 +1,15 @@
 use crate::CHOICES;
-use crate::Status;
-use std::collections::{HashMap, VecDeque};
 use ndarray::{Array, Array2};
-use std::fmt;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug)]
 pub struct BayesNet {
-    pub dag: HashMap<String, Node>,
-    pub ordered_nodes: VecDeque<String>,
+    dag: HashMap<String, Node>,
+    ordered_nodes: VecDeque<String>,
 }
 
 #[derive(Debug)]
-pub struct Node {
+struct Node {
     children: Vec<String>,
     parents: Vec<String>,
     cpt: Array2<f64>,
@@ -25,7 +23,7 @@ impl BayesNet {
         }
     }
 
-    pub fn visit(dag: &HashMap<String, Node>, variable: &String, ordered_nodes: &mut VecDeque<String>) {
+    fn visit(dag: &HashMap<String, Node>, variable: &String, ordered_nodes: &mut VecDeque<String>) {
         if ordered_nodes.contains(variable) {
             return ();
         }
@@ -128,72 +126,5 @@ impl BayesNet {
 
         // unnormalized
         markov_blanket_dist
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub file_name: String,
-    pub query: String,
-    pub inference_type: Status,
-    pub evidences: HashMap<String, usize>,
-}
-
-impl fmt::Display for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "P( {} ", self.query.clone())?;
-        if self.evidences.is_empty() {
-            return write!(f, ")");
-        }
-        write!(f, "|")?;
-        for (k, v) in self.evidences.iter() {
-            write!(f, " {0} = {1}", *k, *v == 0)?;
-        }
-        write!(f, " )")
-    }
-}
-
-
-impl Config {
-    pub fn new(mut args: std::env::Args) -> Self {
-        args.next();
-
-        let inference_type_decider = args.next().unwrap();
-
-        let (file_name, inference_type) = match inference_type_decider.parse::<u32>() {
-            Ok(num_samples) => {
-                let file_name = args.next().expect("Didn't get a file");
-                (file_name, Status::ApproxInference(num_samples))
-            }
-            Err(_) => {
-                let file_name = inference_type_decider;
-                (file_name, Status::ExactInference)
-            }
-        };
-
-        let mut evidences: HashMap<String, usize> = HashMap::new();
-
-        let query = args.next().expect("Didn't get a query");
-
-        loop {
-            let evidence_variable = match args.next() {
-                Some(arg) => arg,
-                None => break,
-            };
-
-            let evidence_value = match args.next() {
-                Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
-                None => panic!("Didn't get a variable value"),
-            };
-
-            evidences.insert(evidence_variable, !evidence_value as usize);
-        }
-
-        Config {
-            file_name,
-            query,
-            inference_type,
-            evidences,
-        }
     }
 }

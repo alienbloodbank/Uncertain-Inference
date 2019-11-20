@@ -38,6 +38,7 @@ pub fn gibbs_ask(
             counts[*sample.get(query).unwrap()] += 1.0;
         }
     }
+
     // Normalization
     let sum: f64 = counts.iter().sum();
     counts.iter().map(|x| *x / sum).collect()

@@ -12,15 +12,17 @@ mod like_weighting;
 mod reject_sampling;
 mod xml_parser;
 
-use bayes_net::*;
+use bayes_net::BayesNet;
 use exact_inference::enumeration_ask;
 use gibbs_sampling::gibbs_ask;
 use like_weighting::likelihood_weighting;
 use reject_sampling::rejection_sampling;
-use xml_parser::get_xml_contents;
-use std::env;
-use std::time::Instant;
+use xml_parser::init_net_from_xmlbif;
+
 use std::collections::HashMap;
+use std::env;
+use std::fmt;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub enum Status {
@@ -35,16 +37,82 @@ enum Outcome {
 
 const CHOICES: &[usize] = &[Outcome::TRUE as usize, Outcome::FALSE as usize];
 
+#[derive(Debug, Clone)]
+pub struct Config {
+    file_name: String,
+    query: String,
+    inference_type: Status,
+    evidences: HashMap<String, usize>,
+}
+
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "P( {} ", self.query.clone())?;
+        if self.evidences.is_empty() {
+            return write!(f, ")");
+        }
+        write!(f, "|")?;
+        for (k, v) in self.evidences.iter() {
+            write!(f, " {0} = {1}", *k, *v == 0)?;
+        }
+        write!(f, " )")
+    }
+}
+
+impl Config {
+    fn new(mut args: std::env::Args) -> Self {
+        args.next();
+
+        let inference_type_decider = args.next().unwrap();
+
+        let (file_name, inference_type) = match inference_type_decider.parse::<u32>() {
+            Ok(num_samples) => {
+                let file_name = args.next().expect("Didn't get a file");
+                (file_name, Status::ApproxInference(num_samples))
+            }
+            Err(_) => {
+                let file_name = inference_type_decider;
+                (file_name, Status::ExactInference)
+            }
+        };
+
+        let mut evidences: HashMap<String, usize> = HashMap::new();
+
+        let query = args.next().expect("Didn't get a query");
+
+        loop {
+            let evidence_variable = match args.next() {
+                Some(arg) => arg,
+                None => break,
+            };
+
+            let evidence_value = match args.next() {
+                Some(arg) => arg.parse::<bool>().expect("Didn't get a variable value"),
+                None => panic!("Didn't get a variable value"),
+            };
+
+            evidences.insert(evidence_variable, !evidence_value as usize);
+        }
+
+        Config {
+            file_name,
+            query,
+            inference_type,
+            evidences,
+        }
+    }
+}
+
 mod test_inference {
     use super::*;
 
     pub fn exact_inference<F>(config: &Config, net: &BayesNet, test_name: &str, f: F)
-        where
-            F: Fn(&String, &HashMap<String, usize>, &BayesNet) -> Vec<f64>,
+    where
+        F: Fn(&String, &HashMap<String, usize>, &BayesNet) -> Vec<f64>,
     {
         let now = Instant::now();
         println!(
-            "\n{0}\n{1} Ans: {2:?}",
+            "\n{0}\n{1} = {2:?}",
             test_name,
             config,
             f(&config.query, &config.evidences, net)
@@ -53,13 +121,13 @@ mod test_inference {
     }
 
     pub fn approx_inference<F>(config: &Config, net: &BayesNet, test_name: &str, f: F)
-        where
-            F: Fn(&String, &HashMap<String, usize>, &BayesNet, u32) -> Vec<f64>,
+    where
+        F: Fn(&String, &HashMap<String, usize>, &BayesNet, u32) -> Vec<f64>,
     {
         let now = Instant::now();
         if let Status::ApproxInference(num_samples) = config.inference_type {
             println!(
-                "\n{0}\n{1} Ans: {2:?}",
+                "\n{0}\n{1} = {2:?}",
                 test_name,
                 config,
                 f(&config.query, &config.evidences, net, num_samples)
@@ -74,7 +142,7 @@ fn main() {
 
     let mut net = BayesNet::new();
 
-    get_xml_contents(&config.file_name, &mut net);
+    init_net_from_xmlbif(&config.file_name, &mut net);
 
     if net.is_variable_valid(&config.query) {
         println!("Query variable exist");
