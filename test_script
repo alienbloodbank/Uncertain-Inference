@@ -16,7 +16,7 @@ grass2="S C true W false"
 grass3="W S true R true"
 
 dog1="dog-out light-on true bowel-problem true"
-dog2="bowel-problem light-on true family-out true"i
+dog2="bowel-problem light-on true family-out true"
 dog3="hear-bark light-on true bowel-problem true"
 
 EVALUATE=1 cargo run $afile $alarm1

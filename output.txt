@@ -2,135 +2,152 @@ Query variable exist
 Evidence list is valid
 
 Exact Inference distribution = [0.2841718353643929, 0.7158281646356071]
-1661 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.2864947089947089, 0.713505291005291]
-6.3962944 seconds elapsed
+1901 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.2823015873015873, 0.7176984126984127]
+8.4503938 seconds elapsed
 
 Exact Inference distribution = [0.2841718353643929, 0.7158281646356071]
-681 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.2817982067509247, 0.7182017932490753]
-1.6743296 seconds elapsed
+1131 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.28214289785232793, 0.7178571021476721]
+4.6524079 seconds elapsed
 
 Exact Inference distribution = [0.2841718353643929, 0.7158281646356071]
-71 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.28591549295774654, 0.7140845070422535]
-0.0289061 seconds elapsed
+51 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.2856209150326797, 0.7143790849673203]
+0.0157177 seconds elapsed
 Query variable exist
 Evidence list is valid
 
 Exact Inference distribution = [0.2101, 0.7899]
-2131 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.2117989417989418, 0.7882010582010582]
-10.9311743 seconds elapsed
+1601 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.21, 0.79]
+5.9482788 seconds elapsed
 
 Exact Inference distribution = [0.2101, 0.7899]
-91 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.2117216117216118, 0.7882783882783881]
-0.0330044 seconds elapsed
+51 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.21176470588235302, 0.7882352941176469]
+0.0112207 seconds elapsed
 
 Exact Inference distribution = [0.2101, 0.7899]
-111 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.2082082082082082, 0.7917917917917918]
-0.0470888 seconds elapsed
+11 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.20808080808080806, 0.7919191919191919]
+0.00096 seconds elapsed
 Query variable exist
 Evidence list is valid
 
 Exact Inference distribution = [0.0014222443015077795, 0.9985777556984923]
-71 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.0014220589235898482, 0.9985779410764102]
-0.0144741 seconds elapsed
+141 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.0014218169537318474, 0.9985781830462681]
+0.0538943 seconds elapsed
 
 Exact Inference distribution = [0.0014222443015077795, 0.9985777556984923]
-611 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.0014359090442019513, 0.998564090955798]
-1.3622721 seconds elapsed
+821 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.0014152524790340304, 0.9985847475209659]
+2.4059688 seconds elapsed
 
 Exact Inference distribution = [0.0014222443015077795, 0.9985777556984923]
-681 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.0014194811551639743, 0.998580518844836]
-1.2887066 seconds elapsed
+561 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.0014260249554367199, 0.9985739750445632]
+0.8699075 seconds elapsed
 Query variable exist
 Evidence list is valid
 
 Exact Inference distribution = [0.0639269406392694, 0.9360730593607307]
-581 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.06447787778670132, 0.9355221222132987]
-0.6485592 seconds elapsed
+621 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.06358688482140494, 0.936413115178595]
+0.7420617 seconds elapsed
 
 Exact Inference distribution = [0.0639269406392694, 0.9360730593607307]
-61 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.06415422095879465, 0.9358457790412054]
-0.0126761 seconds elapsed
+21 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.06395876702617961, 0.9360412329738204]
+0.0019162 seconds elapsed
 
 Exact Inference distribution = [0.0639269406392694, 0.9360730593607307]
-271 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.06432964329643297, 0.935670356703567]
-0.2578587 seconds elapsed
-Query variable exist
-Evidence list is valid
-
-Exact Inference distribution = [0.010989010989010986, 0.9890109890109889]
 181 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.010962871738733808, 0.9890371282612662]
-0.0665961 seconds elapsed
+gibbs sampling distribution = [0.06445672191528545, 0.9355432780847146]
+0.1181247 seconds elapsed
+Query variable exist
+Evidence list is valid
 
-Exact Inference distribution = [0.010989010989010986, 0.9890109890109889]
-261 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.01091173242134597, 0.989088267578654]
-0.2087847 seconds elapsed
+Exact Inference distribution = [0.01098901098901099, 0.9890109890109889]
+551 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.010916881693012793, 0.9890831183069873]
+0.6022169 seconds elapsed
 
-Exact Inference distribution = [0.010989010989010986, 0.9890109890109889]
-211 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.011058451816745656, 0.9889415481832543]
-0.1372647 seconds elapsed
+Exact Inference distribution = [0.01098901098901099, 0.9890109890109889]
+141 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.011082193632332081, 0.9889178063676679]
+0.0626719 seconds elapsed
+
+Exact Inference distribution = [0.01098901098901099, 0.9890109890109889]
+171 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.011013645224171541, 0.9889863547758284]
+0.0915724 seconds elapsed
 Query variable exist
 Evidence list is valid
 
 Exact Inference distribution = [0.99, 0.009999999999999998]
-51 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.9916666666666667, 0.008333333333333304]
-0.0062581 seconds elapsed
-
-Exact Inference distribution = [0.99, 0.009999999999999998]
-11 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.9880885058425886, 0.01191149415741144]
-0.000739 seconds elapsed
-
-Exact Inference distribution = [0.99, 0.009999999999999998]
-31 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.9876344086021508, 0.012365591397849207]
-0.0036741 seconds elapsed
-Query variable exist
-Evidence list is valid
-
-Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
-1991 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.9833333333333333, 0.01666666666666672]
-9.5966604 seconds elapsed
-
-Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
-11 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.9785353535353535, 0.02146464646464652]
-0.0009612 seconds elapsed
-
-Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
-11 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.9777777777777775, 0.022222222222222476]
-0.0012369 seconds elapsed
-Query variable exist
-Evidence list is valid
-
-Exact Inference distribution = [0.6886735849056603, 0.3113264150943396]
-2321 samples necessary to be within 1% of exact value
-rejection sampling distribution = [0.6873232323232323, 0.31267676767676766]
-13.1101486 seconds elapsed
-
-Exact Inference distribution = [0.6886735849056603, 0.3113264150943396]
 61 samples necessary to be within 1% of exact value
-likelihood sampling distribution = [0.6889382104771745, 0.3110617895228255]
-0.0171569 seconds elapsed
+rejection sampling distribution = [0.9952380952380953, 0.004761904761904745]
+0.0090941 seconds elapsed
 
-Exact Inference distribution = [0.6886735849056603, 0.3113264150943396]
-51 samples necessary to be within 1% of exact value
-gibbs sampling distribution = [0.6904139433551199, 0.30958605664488015]
-0.0148315 seconds elapsed
+Exact Inference distribution = [0.99, 0.009999999999999998]
+11 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.9912244897959184, 0.008775510204081627]
+0.0007879 seconds elapsed
+
+Exact Inference distribution = [0.99, 0.009999999999999998]
+21 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.9801587301587299, 0.019841269841270104]
+0.0020135 seconds elapsed
+Query variable exist
+Evidence list is valid
+
+Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
+1881 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.975, 0.025000000000000022]
+8.6391537 seconds elapsed
+
+Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
+11 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.9871212121212121, 0.012878787878787934]
+0.0010548 seconds elapsed
+
+Exact Inference distribution = [0.9835849056603773, 0.01641509433962264]
+11 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.9787878787878785, 0.02121212121212146]
+0.0012473 seconds elapsed
+Query variable exist
+Evidence list is valid
+
+Exact Inference distribution = [0.009999999999999998, 0.99]
+211 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.010062106459670062, 0.9899378935403299]
+0.1308366 seconds elapsed
+
+Exact Inference distribution = [0.009999999999999998, 0.99]
+591 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.009983079526226596, 0.9900169204737734]
+1.3586788 seconds elapsed
+
+Exact Inference distribution = [0.009999999999999998, 0.99]
+271 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.00996309963099631, 0.9900369003690037]
+0.2958766 seconds elapsed
+Query variable exist
+Evidence list is valid
+
+Exact Inference distribution = [0.6886735849056603, 0.31132641509433967]
+2571 samples necessary to be within 1% of exact value
+rejection sampling distribution = [0.6888492063492062, 0.3111507936507938]
+15.9318524 seconds elapsed
+
+Exact Inference distribution = [0.6886735849056603, 0.31132641509433967]
+91 samples necessary to be within 1% of exact value
+likelihood sampling distribution = [0.686307739269927, 0.31369226073007295]
+0.0353947 seconds elapsed
+
+Exact Inference distribution = [0.6886735849056603, 0.31132641509433967]
+31 samples necessary to be within 1% of exact value
+gibbs sampling distribution = [0.6903225806451615, 0.3096774193548385]
+0.0062387 seconds elapsed
