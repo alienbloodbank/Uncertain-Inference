@@ -8,18 +8,18 @@
 mod bayes_net;
 mod exact_inference;
 mod gibbs_sampling;
+mod inf_test;
 mod like_weighting;
 mod reject_sampling;
 mod xml_parser;
-mod inf_test;
 
 use bayes_net::BayesNet;
 use exact_inference::enumeration_ask;
 use gibbs_sampling::gibbs_ask;
+use inf_test::test_inf;
 use like_weighting::likelihood_weighting;
 use reject_sampling::rejection_sampling;
 use xml_parser::init_net_from_xmlbif;
-use inf_test::test_inf;
 
 use std::collections::HashMap;
 use std::env;
@@ -130,23 +130,17 @@ mod test_inference {
         if let Status::ApproxInference(num_samples) = config.inference_type {
             let result = f(&config.query, &config.evidences, net, num_samples);
             if result[0].is_nan() {
-                println!("Insufficient counts to form distribution. Try increasing number of samples.");
+                eprintln!("Insufficient sample count to form a valid distribution. Try increasing number of samples.");
             } else {
-                println!(
-                    "\n{0}\n{1} = {2:?}",
-                    test_name,
-                    config,
-                    result
-                );
+                println!("\n{0}\n{1} = {2:?}", test_name, config, result);
             }
         }
         println!("{} seconds elapsed", now.elapsed().as_secs_f64());
     }
 }
 
-
 fn main() {
-    let mut config = Config::new(env::args());
+    let config = Config::new(env::args());
 
     let mut net = BayesNet::new();
 
@@ -169,46 +163,44 @@ fn main() {
     // Topological sorting
     net.order_variables();
 
-    let now = Instant::now();
-    test_inf("rejection", &config, &net);
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+    // Put 'EVALUATE=1' before 'cargo run ..'
+    if !env::var("EVALUATE").is_err() {
+        test_inf("rejection", &config, &net);
 
-    let now = Instant::now();
-    test_inf("likelihood", &config, &net);
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
-    let now = Instant::now();
-    test_inf("gibbs", &config, &net);
-    println!("{} seconds elapsed", now.elapsed().as_secs_f64());
+        test_inf("likelihood", &config, &net);
 
-//    match config.inference_type {
-//        Status::ExactInference => {
-//            /* Exact Inference Test */
-//            test_inference::exact_inference(
-//                &config,
-//                &net,
-//                "Inference by Enumeration",
-//                enumeration_ask,
-//            );
-//        }
-//        Status::ApproxInference(_) => {
-//            /* Rejection Sampling Test */
-//            test_inference::approx_inference(
-//                &config,
-//                &net,
-//                "Rejection Sampling",
-//                rejection_sampling,
-//            );
-//
-//            /* Likelihood Weighting Test */
-//            test_inference::approx_inference(
-//                &config,
-//                &net,
-//                "Likelihood Weighting",
-//                likelihood_weighting,
-//            );
-//
-//            /* Gibbs Sampling Test */
-//            test_inference::approx_inference(&config, &net, "Gibbs Sampling", gibbs_ask);
-//        }
-//    };
+        test_inf("gibbs", &config, &net);
+    } else {
+        match config.inference_type {
+            Status::ExactInference => {
+                /* Exact Inference Test */
+                test_inference::exact_inference(
+                    &config,
+                    &net,
+                    "Inference by Enumeration",
+                    enumeration_ask,
+                );
+            }
+            Status::ApproxInference(_) => {
+                /* Rejection Sampling Test */
+                test_inference::approx_inference(
+                    &config,
+                    &net,
+                    "Rejection Sampling",
+                    rejection_sampling,
+                );
+
+                /* Likelihood Weighting Test */
+                test_inference::approx_inference(
+                    &config,
+                    &net,
+                    "Likelihood Weighting",
+                    likelihood_weighting,
+                );
+
+                /* Gibbs Sampling Test */
+                test_inference::approx_inference(&config, &net, "Gibbs Sampling", gibbs_ask);
+            }
+        };
+    }
 }
