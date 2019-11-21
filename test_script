@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# To run this file and capture output
+# ./test_script | tee output.txt
+
+afile="sample_networks/aima-alarm.xml"
+gfile="sample_networks/aima-wet-grass.xml "
+dfile="sample_networks/dog-problem.xml "
+
+alarm1="B J true M true"
+alarm2="M E true B false"
+alarm3="E B false A false"
+
+grass1="C S true W false"
+grass2="S C true W false"
+grass3="W S true R true"
+
+dog1="dog-out light-on true bowel-problem true"
+dog2="bowel-problem light-on true family-out true"i
+dog3="hear-bark light-on true bowel-problem true"
+
+EVALUATE=1 cargo run $afile $alarm1
+EVALUATE=1 cargo run $afile $alarm2
+EVALUATE=1 cargo run $afile $alarm3
+
+EVALUATE=1 cargo run $gfile $grass1
+EVALUATE=1 cargo run $gfile $grass2
+EVALUATE=1 cargo run $gfile $grass3
+
+EVALUATE=1 cargo run $dfile $dog1
+EVALUATE=1 cargo run $dfile $dog2
+EVALUATE=1 cargo run $dfile $dog3
