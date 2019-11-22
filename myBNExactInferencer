@@ -1,4 +1,4 @@
 #!/bin/bash
 
-cargo run --quiet "$@"
+cargo run --release --quiet "$@"
 

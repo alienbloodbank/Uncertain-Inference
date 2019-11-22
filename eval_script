@@ -19,14 +19,14 @@ dog1="dog-out light-on true bowel-problem true"
 dog2="bowel-problem light-on true family-out true"
 dog3="hear-bark light-on true bowel-problem true"
 
-EVALUATE=1 cargo run $afile $alarm1
-EVALUATE=1 cargo run $afile $alarm2
-EVALUATE=1 cargo run $afile $alarm3
+EVALUATE=1 cargo run --release $afile $alarm1
+EVALUATE=1 cargo run --release $afile $alarm2
+EVALUATE=1 cargo run --release $afile $alarm3
 
-EVALUATE=1 cargo run $gfile $grass1
-EVALUATE=1 cargo run $gfile $grass2
-EVALUATE=1 cargo run $gfile $grass3
+EVALUATE=1 cargo run --release $gfile $grass1
+EVALUATE=1 cargo run --release $gfile $grass2
+EVALUATE=1 cargo run --release $gfile $grass3
 
-EVALUATE=1 cargo run $dfile $dog1
-EVALUATE=1 cargo run $dfile $dog2
-EVALUATE=1 cargo run $dfile $dog3
+EVALUATE=1 cargo run --release $dfile $dog1
+EVALUATE=1 cargo run --release $dfile $dog2
+EVALUATE=1 cargo run --release $dfile $dog3

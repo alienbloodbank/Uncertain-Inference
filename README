@@ -26,3 +26,10 @@ Running Examples:
 	(1 level above src/)
 	- ./myBNExactInferencer sample_networks/aima-alarm.xml B J true M true
 	- ./myBNApproxInferencer 10000 sample_networks/aima-alarm.xml B J true M true
+	(Rare Case)
+	If rust is not installed on system, then we provide a compiled executable.
+	Use that to run examples as follows
+	cd target/debug (or target/release)
+ 	- ./bayes_nets sample_networks/aima-alarm.xml B J true M true
+	- ./bayes_nets 10000 sample_networks/aima-alarm.xml B J true M true
+
