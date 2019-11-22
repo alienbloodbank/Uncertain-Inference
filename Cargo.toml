@@ -13,4 +13,4 @@ ndarray = "0.13.0"
 opt-level = 3
 
 [profile.release]
-opt-level = 0
+opt-level = 3

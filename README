@@ -7,18 +7,22 @@ Authors:
 
 Language: Rust
 
-Files in src/:
-        main.rs 
+Source Files:
+	- cd /src
+        main.rs, bayes_net.rs, exact_inference.rs, gibbs_sampling.rs, inf_test.rs, like_weighting.rs, reject_sampling.rs, xml_parser.rs
 
 Prerequisites:
 	Rust (https://www.rust-lang.org/tools/install)
 
-Build Instructions:
+Build Instructions: (Optional)
+	(1 level above src/)
 	- 'cargo build' or 'cargo build --release'
 
 Output
 	- target/debug/bayes_nets
 	- target/release/bayes_nets
 
-Running Example:
-	- cargo run 10000 sample_networks/aima-alarm.xml B J true M true
+Running Examples:
+	(1 level above src/)
+	- ./myBNExactInferencer sample_networks/aima-alarm.xml B J true M true
+	- ./myBNApproxInferencer 10000 sample_networks/aima-alarm.xml B J true M true
